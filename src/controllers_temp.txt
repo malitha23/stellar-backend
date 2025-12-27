@@ -1,0 +1,37 @@
+
+// Mocking individual controller files content to be written to their respective paths
+// Availability Controller
+import { Controller, Post, Body, Get, UseGuards, Request, Param } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { AvailabilityService } from './availability.service';
+
+@Controller('availability')
+@UseGuards(AuthGuard('jwt'))
+export class AvailabilityController {
+  constructor(private readonly availabilityService: AvailabilityService) {}
+  @Post()
+  set(@Request() req, @Body() body: any) {
+    return this.availabilityService.setAvailability(req.user, body.date, body.isAvailable, body.note);
+  }
+  @Get(':userId')
+  get(@Param('userId') userId: string) {
+    return this.availabilityService.getUserAvailability(+userId);
+  }
+}
+
+// Notifications Controller
+@Controller('notifications')
+@UseGuards(AuthGuard('jwt'))
+export class NotificationsController {
+  constructor(private readonly notificationsService: NotificationsService) {}
+  @Get()
+  get(@Request() req) {
+    return this.notificationsService.getMyNotifications(req.user);
+  }
+  @Post(':id/read')
+  read(@Param('id') id: string) {
+    return this.notificationsService.markAsRead(+id);
+  }
+}
+
+// More controllers follow same pattern...
