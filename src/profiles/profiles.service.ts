@@ -302,24 +302,38 @@ export class ProfilesService {
         };
     }
 
-    async getProfile(user: User) {
+    async getProfile(userId: number) {
+        // 1. Fetch the user first
+        const user = await this.userRepository.findOne({
+            where: { id: userId },
+        });
+
+        if (!user) {
+            throw new Error('User not found');
+        }
+
+        // 2. Try fetching model profile
         const modelProfile = await this.modelProfileRepository.findOne({
             where: { user: { id: user.id } },
-            relations: ['skills', 'languages', 'portfolio'],
+            relations: ['user', 'skills', 'languages', 'portfolio'],
         });
 
         if (modelProfile) {
             return { ...modelProfile, profileType: 'model' };
         }
 
+        // 3. Try fetching director profile
         const directorProfile = await this.directorProfileRepository.findOne({
             where: { user: { id: user.id } },
+            relations: ['user'],
         });
 
         if (directorProfile) {
             return { ...directorProfile, profileType: 'director' };
         }
 
-        return null;
+        // 4. No profile, return user only
+        return { ...user, profileType: 'user' };
     }
+
 }

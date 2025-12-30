@@ -118,7 +118,7 @@ export class UsersService {
     };
 
     const accessToken = this.jwtService.sign(payload, {
-      expiresIn: '15m',
+      expiresIn: '20min',
       secret: process.env.JWT_ACCESS_SECRET,
     });
 

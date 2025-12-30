@@ -119,24 +119,30 @@ export class ProfilesController {
 
     @UseGuards(AuthGuard('jwt'))
     @Get('me')
-    getMyProfile(@Request() req) {
-        // req.user has { userId, email, role } from JwtStrategy, but Service expects User entity or ID.
-        // Ideally pass ID and let service find User, or just ID.
-        // User entity is needed for relations.
-        // For now, partial user is enough for ID.
-        return this.profilesService.getProfile({ id: req.user.userId } as any);
+    async getMyProfile(@Request() req) {
+        const userId = req.user.userId; // from JwtStrategy payload
+        return this.profilesService.getProfile(userId);
     }
+
 
     // profiles.controller.ts
     @Get('status')
     @UseGuards(AuthGuard('jwt'))
     async getProfileStatus(@Request() req) {
-        const userId = req.user?.id || req.user?.userId;
 
-        const user = await this.profilesService.getUser(req.user.userId);
+        const userId = Number(req.user?.userId || req.user?.id);
+
+        if (!userId || isNaN(userId)) {
+            return {
+                success: false,
+                isLoggedIn: false,
+                message: 'Invalid user token',
+            };
+        }
+
+        const user = await this.profilesService.getUser(userId);
 
         if (!user) {
-            console.log('User not found in database');
             return {
                 success: false,
                 isLoggedIn: false,
@@ -144,83 +150,76 @@ export class ProfilesController {
             };
         }
 
-
-        let profileStatus = {
+        let profileStatus: any = {
             success: true,
             isLoggedIn: true,
-            userType: user.role, // Use 'role' from database
-            role: user.role, // Also include role for compatibility
+            userType: user.role,
+            role: user.role,
             email: user.email,
             name: user.name,
             userId: user.id,
+            profileExists: false,
+            isProfileComplete: false,
+            isIdentityVerified: false,
         };
 
-        // Add model-specific status
-        if (user.role === UserRole.MODEL && user.modelProfile) {
-            const modelProfile = user.modelProfile;
-            profileStatus = {
-                ...profileStatus,
-                isProfileComplete: modelProfile.profileCompletionPercentage >= 80,
-                isIdentityVerified: modelProfile.nicVerified,
-                profileExists: true,
-                profileCompletionPercentage: modelProfile.profileCompletionPercentage,
-                nicVerified: modelProfile.nicVerified,
-                profileId: modelProfile.id,
-                hasProfilePhoto: !!modelProfile.profilePhotoUrl,
-                profileCreatedAt: modelProfile.createdAt,
-                heartCoins: modelProfile.heartCoins,
-                totalProjects: modelProfile.totalProjectsCompleted,
-                averageRating: modelProfile.averageRating,
-                // Add other model profile fields as needed
-                fullName: modelProfile.fullName,
-                location: modelProfile.location,
-            } as any;
+        /* ================= MODEL ================= */
+        if (user.role === UserRole.MODEL) {
+            if (user.modelProfile) {
+                const p = user.modelProfile;
+                profileStatus = {
+                    ...profileStatus,
+                    profileExists: true,
+                    isProfileComplete: p.profileCompletionPercentage >= 80,
+                    isIdentityVerified: p.nicVerified,
+                    profileCompletionPercentage: p.profileCompletionPercentage,
+                    nicVerified: p.nicVerified,
+                    profileId: p.id,
+                    hasProfilePhoto: !!p.profilePhotoUrl,
+                    heartCoins: p.heartCoins,
+                    totalProjects: p.totalProjectsCompleted,
+                    averageRating: p.averageRating,
+                    fullName: p.fullName,
+                    location: p.location,
+                };
+            }
         }
-        // Add director-specific status
-        else if (user.role === UserRole.DIRECTOR && user.directorProfile) {
-            const directorProfile = user.directorProfile;
-            profileStatus = {
-                ...profileStatus,
-                isProfileComplete: true, // Director profiles might have different criteria
-                isIdentityVerified: true, // Adjust as needed
-                profileExists: true,
-                profileId: directorProfile.id,
-                // Add director-specific fields
-                companyName: directorProfile.companyName,
-                // ... other director profile fields
-            } as any;
-        }
-        // For models without profile
-        else if (user.role === UserRole.MODEL) {
-            profileStatus = {
-                ...profileStatus,
-                isProfileComplete: false,
-                isIdentityVerified: false,
-                profileExists: false,
-                profileCompletionPercentage: 0,
-                nicVerified: false,
-            } as any;
-        }
-        // For directors without profile
+
+        /* ================= DIRECTOR ================= */
         else if (user.role === UserRole.DIRECTOR) {
+            if (user.directorProfile) {
+                const d = user.directorProfile;
+                profileStatus = {
+                    ...profileStatus,
+                    profileExists: true,
+                    isProfileComplete: true,
+                    isIdentityVerified: true,
+                    profileId: d.id,
+                    verificationStatus: d.verificationStatus, // pending / approved / rejected
+                    companyName: d.companyName,
+                };
+            }
+        }
+
+        /* ================= ADMIN ================= */
+        else if (user.role === UserRole.ADMIN) {
             profileStatus = {
                 ...profileStatus,
-                isProfileComplete: false,
-                isIdentityVerified: false,
-                profileExists: false,
-            } as any;
+                profileExists: true,
+                isProfileComplete: true,
+                isIdentityVerified: true,
+            };
         }
-        // For admin/public users
+
+        /* ================= PUBLIC ================= */
         else {
             profileStatus = {
                 ...profileStatus,
-                isProfileComplete: false,
-                isIdentityVerified: false,
                 profileExists: false,
-            } as any;
+            };
         }
-
 
         return profileStatus;
     }
+
 }
